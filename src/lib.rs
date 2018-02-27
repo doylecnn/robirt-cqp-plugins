@@ -210,9 +210,6 @@ fn send_notification(notification: serde_json::Value){
 }
 
 fn handle_client(mut stream :TcpStream){
-    // unsafe{
-    //     CQP_CLIENT.add_log(cqpsdk::CQLOG_INFO,"rust json rpc", "进入handle_client...");
-    // };
     let mut request = String::new();
     let result = stream.read_to_string(&mut request);
     match result {
@@ -221,7 +218,6 @@ fn handle_client(mut stream :TcpStream){
             let json_value: Value = serde_json::from_str(&request).unwrap();
             let notification = json_value.as_object().unwrap();
             let method = notification.get("method").unwrap().as_str().unwrap();
-            // CQP_CLIENT.add_log(cqpsdk::LogLevel::Debug,"rust json rpc", method)
             let params = notification.get("params").unwrap().as_object().unwrap();
             match method{
                 "SendPrivateMessage" => {
@@ -271,15 +267,24 @@ fn handle_client(mut stream :TcpStream){
                     let seconds = params.get("seconds").unwrap().as_i64().unwrap();
                     unsafe{ CQP_CLIENT.set_group_ban(groupnum, qqnum, seconds) };
                 }
-                // "GetGroupMemberInfo"=>{//Auth=130 //getGroupMemberInfoV2
-                //     let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
-                //     let qqnum = params.get("qqnum").unwrap().as_i64().unwrap();
-                //     unsafe{
-                //         cqpapi::CQ_getGroupMemberInfoV2(CQP_CLIENT.auth_code, groupnum, qqnum, 0);
-                //     };
-                //     let notification = json!({"method":"GroupMemberInfo","params":{"token":csrf_token,"cookies":cookies,"loginqq":login_qq}});
-                //     send_notification(notification);
-                // }
+                "GetGroupList" => {
+                    let rawdata = unsafe{ CQP_CLIENT.get_group_list() };
+                    let notification = json!({"method":"GroupList","params":{"rawdata":rawdata}});
+                    send_notification(notification);
+                }
+                "GetGroupMemberList" => {
+                    let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
+                    let rawdata = unsafe{ CQP_CLIENT.get_group_member_list(groupnum) };
+                    let notification = json!({"method":"GroupMemberList","params":{"rawdata":rawdata}});
+                    send_notification(notification);
+                }
+                "GetGroupMemberInfo"=>{
+                    let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
+                    let qqnum = params.get("qqnum").unwrap().as_i64().unwrap();
+                    let rawdata = unsafe{ CQP_CLIENT.get_group_member_info(groupnum, qqnum, 0) };
+                    let notification = json!({"method":"GroupMemberInfo","params":{"rawdata":rawdata}});
+                    send_notification(notification);
+                }
                 _ =>{
                     unsafe{ CQP_CLIENT.add_log(cqpsdk::LogLevel::Error,"rust json rpc default",&request) };
                 }
