@@ -29,7 +29,7 @@ lazy_static! {
 
 #[export_name="AppInfo"]
 pub extern "stdcall" fn app_info() -> *const c_char {
-    unsafe{ CString::new(CQP_CLIENT.app_info()).unwrap().into_raw() }
+    CString::new(unsafe{ CQP_CLIENT.app_info() }).unwrap().into_raw()
 }
 
 #[export_name="Initialize"]
