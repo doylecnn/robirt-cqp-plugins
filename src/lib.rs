@@ -1,5 +1,8 @@
+extern crate base64;
+extern crate serde;
 #[macro_use]
 extern crate serde_json;
+
 use serde_json::Value;
 
 extern crate encoding;
@@ -101,12 +104,12 @@ pub extern "stdcall" fn cqp_disable_handler()->i32{
 // Type=21 私聊消息
 // subType:11:来自好友 1:来自在线状态 2:来自群 3:来自讨论组
 #[export_name="PrivateMessageHandler"]
-pub extern "stdcall" fn private_message_handler(sub_type: i32, send_time: i32, qq_num: i64, msg: *const c_char, font: i32) -> i32 {
+pub extern "stdcall" fn private_message_handler(sub_type: i32, msg_id: i32, qq_num: i64, msg: *const c_char, font: i32) -> i32 {
     let msg = unsafe{
         GB18030_C_CHAR_PRT_TO_UTF8_STR!(msg)
     };
 
-    let notification = json!({"method":"PrivateMessage","params":{"subtype":sub_type,"sendtime":send_time,"qqnum":qq_num,"message":msg,"font":font}});
+    let notification = json!({"method":"PrivateMessage","params":{"subtype":sub_type,"msg_id":msg_id,"qqnum":qq_num,"message":msg,"font":font}});
     send_notification(notification);
     return cqpsdk::EVENT_IGNORE;
 }
@@ -114,14 +117,14 @@ pub extern "stdcall" fn private_message_handler(sub_type: i32, send_time: i32, q
 // Type=2 群消息  subType固定为1
 // fromQQ == 80000000 && strlen(fromAnonymous)>0 为 匿名消息
 #[export_name="GroupMessageHandler"]
-pub extern "stdcall" fn group_message_handler(sub_type: i32, send_time: i32, group_num: i64, qq_num: i64, anonymous_name: *const c_char, msg: *const c_char, font: i32) -> i32 {
+pub extern "stdcall" fn group_message_handler(sub_type: i32, msg_id: i32, group_num: i64, qq_num: i64, anonymous_name: *const c_char, msg: *const c_char, font: i32) -> i32 {
     let msg = unsafe{
         GB18030_C_CHAR_PRT_TO_UTF8_STR!(msg)
     };
     let anonymous_name = unsafe{
         GB18030_C_CHAR_PRT_TO_UTF8_STR!(anonymous_name)
     };
-    let notification = json!({"method":"GroupMessage","params":{"subtype":sub_type,"sendtime":send_time,"groupnum":group_num,"qqnum":qq_num,"anonymousname":anonymous_name,"message":msg,"font":font}});
+    let notification = json!({"method":"GroupMessage","params":{"subtype":sub_type,"msg_id":msg_id,"groupnum":group_num,"qqnum":qq_num,"anonymousname":anonymous_name,"message":msg,"font":font}});
     send_notification(notification);
     return cqpsdk::EVENT_IGNORE;
 }
@@ -175,11 +178,11 @@ pub extern "stdcall" fn request_add_group_handler(sub_type: i32, send_time: i32,
 
 // Type=4 讨论组消息处理
 #[export_name="DiscussMessageHandler"]
-pub extern "stdcall" fn discuss_message_handler(sub_type: i32, send_time: i32, from_discuss: i64, qq_num: i64, msg: *const c_char, font: i32) -> i32 {
+pub extern "stdcall" fn discuss_message_handler(sub_type: i32, msg_id: i32, from_discuss: i64, qq_num: i64, msg: *const c_char, font: i32) -> i32 {
     let msg = unsafe{
         GB18030_C_CHAR_PRT_TO_UTF8_STR!(msg);
     };
-    let notification = json!({"method":"DiscussMessage","params":{"subtype":sub_type,"sendtime":send_time,"fromdiscuss":from_discuss,"fromqq":qq_num,"msg":msg,"font":font}});
+    let notification = json!({"method":"DiscussMessage","params":{"subtype":sub_type,"msg_id":msg_id,"fromdiscuss":from_discuss,"fromqq":qq_num,"msg":msg,"font":font}});
     send_notification(notification);
     return cqpsdk::EVENT_IGNORE;
 }
@@ -194,7 +197,7 @@ fn send_notification(notification: serde_json::Value){
         Ok(mut client)=>{
             match client.write_all(notification.as_bytes()){
                 Ok(_)=>{
-                    // CQP_CLIENT.add_log(cqpsdk::CQLOG_INFO,"rust json rpc",&notification);
+                    //unsafe{ CQP_CLIENT.add_log(cqpsdk::LogLevel::Info,"rust json rpc",&notification) };
                 }
                 Err(e)=>{
                     let error_msg = format!("{:?}", e);
@@ -235,12 +238,20 @@ fn handle_client(mut stream :TcpStream){
                     let discussion_num = params.get("discussionnum").unwrap().as_i64().unwrap();
                     unsafe{ CQP_CLIENT.send_discussion_msg(discussion_num, message) };
                 }
-                "GetToken" => {
-                    let csrf_token = unsafe{ CQP_CLIENT.get_csrf_token() };
-                    let login_qq = unsafe{ CQP_CLIENT.get_login_qq() };
+                "GetCookies" => {
                     let cookies = unsafe{ CQP_CLIENT.get_cookies() };
                     let cookies = cookies.to_owned();
-                    let notification = json!({"method":"Token","params":{"token":csrf_token,"cookies":cookies,"loginqq":login_qq}});
+                    let notification = json!({"method":"Cookies","params":{"cookies":cookies}});
+                    send_notification(notification);
+                }
+                "GetCsrfToken" => {
+                    let csrf_token = unsafe{ CQP_CLIENT.get_csrf_token() };
+                    let notification = json!({"method":"Token","params":{"csrf_token":csrf_token}});
+                    send_notification(notification);
+                }
+                "GetLoginQq" => {
+                    let login_qq = unsafe{ CQP_CLIENT.get_login_qq() };
+                    let notification = json!({"method":"LoginQq","params":{"loginqq":login_qq}});
                     send_notification(notification);
                 }
                 "FriendAdd" => {
@@ -268,21 +279,21 @@ fn handle_client(mut stream :TcpStream){
                     unsafe{ CQP_CLIENT.set_group_ban(groupnum, qqnum, seconds) };
                 }
                 "GetGroupList" => {
-                    let rawdata = unsafe{ CQP_CLIENT.get_group_list() };
-                    let notification = json!({"method":"GroupList","params":{"rawdata":rawdata}});
+                    let group_list = unsafe{ CQP_CLIENT.get_group_list() };
+                    let notification = json!({"method":"GroupList","params":{"group_list":group_list}});
                     send_notification(notification);
                 }
                 "GetGroupMemberList" => {
                     let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
-                    let rawdata = unsafe{ CQP_CLIENT.get_group_member_list(groupnum) };
-                    let notification = json!({"method":"GroupMemberList","params":{"rawdata":rawdata}});
+                    let member_list = unsafe{ CQP_CLIENT.get_group_member_list(groupnum) };
+                    let notification = json!({"method":"GroupMemberList","params":{"member_list":member_list}});
                     send_notification(notification);
                 }
                 "GetGroupMemberInfo"=>{
                     let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
                     let qqnum = params.get("qqnum").unwrap().as_i64().unwrap();
-                    let rawdata = unsafe{ CQP_CLIENT.get_group_member_info(groupnum, qqnum, 0) };
-                    let notification = json!({"method":"GroupMemberInfo","params":{"rawdata":rawdata}});
+                    let member = unsafe{ CQP_CLIENT.get_group_member_info(groupnum, qqnum, 0) };
+                    let notification = json!({"method":"GroupMemberInfo","params":{"member":member}});
                     send_notification(notification);
                 }
                 _ =>{
