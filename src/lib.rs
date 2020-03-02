@@ -30,11 +30,13 @@ lazy_static! {
     static ref TCP_CLIENT: Mutex<TcpStream> = Mutex::new(TcpStream::connect("127.0.0.1:7008").unwrap());
 }
 
+// AppInfo
 #[export_name="AppInfo"]
 pub extern "stdcall" fn app_info() -> *const c_char {
     CString::new(unsafe{ CQP_CLIENT.app_info() }).unwrap().into_raw()
 }
 
+// Initialize
 #[export_name="Initialize"]
 pub extern "stdcall" fn initialize(auth_code: i32) -> i32 {
     unsafe { CQP_CLIENT.initialize(auth_code) };
@@ -269,8 +271,7 @@ fn handle_client(mut stream :TcpStream){
                 }
                 "GroupLeave" => {
                     let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
-                    let qqnum = params.get("qqnum").unwrap().as_i64().unwrap();
-                    unsafe{ CQP_CLIENT.set_group_leave(groupnum, qqnum, 0) };
+                    unsafe{ CQP_CLIENT.set_group_leave(groupnum, 0) };
                 }
                 "GroupBan" => {
                     let groupnum = params.get("groupnum").unwrap().as_i64().unwrap();
